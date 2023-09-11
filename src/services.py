@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import time
 from src.agent import Agent
-from src.stream import ActionStream, AudioStream
+from src.stream import ActionStream, AudioStream, get_audio_stream
 from src.typedef import Action, Task
 from src.vps import VirtualPhoneService
 import sounddevice as sd
@@ -56,7 +56,7 @@ class LiveAudioStreamHandler:
         An object that listens to a live audio stream (i.e. phone call) and responds to the it accordingly
     """
     def __init__(self, agent, input_stream: AudioStream = None, output_stream: ActionStream = None) -> None:
-        self.input_stream: AudioStream = input_stream # Audio Stream
+        self.input_stream: sd.InputStream = input_stream # Audio Stream
         self.output_stream: ActionStream = output_stream if output_stream else ActionStream() # Action Stream
         self.agent: Agent = agent
         self.poll_frequency = 1 # in seconds
@@ -64,28 +64,49 @@ class LiveAudioStreamHandler:
 
     def start(self):
         self.status = "running"
-        while self.status == "running":
-            # poll every 1 second
-            time.sleep(self.poll_frequency)
+        self.input_stream = get_audio_stream(block_size=self.poll_frequency * 44100, callback_func=self.on_callback)
+        with self.input_stream:
+            sd.sleep(50000)
+        # while self.status == "running":
+        #     # poll every 1 second
+        #     time.sleep(self.poll_frequency)
 
-            context = self.input_stream.poll(self.poll_frequency)
-            # TODO: Handle case when context is empty
+        #     context = self.input_stream.poll(self.poll_frequency)
+        #     # TODO: Handle case when context is empty
 
-            if self.buffer is None:
-                self.buffer = context
-            else:
-                self.buffer = np.concatenate((self.buffer, context), axis=0)
+        #     if self.buffer is None:
+        #         self.buffer = context
+        #     else:
+        #         self.buffer = np.concatenate((self.buffer, context), axis=0)
             
-            # For testing only
-            # sd.play(self.buffer, self.input_stream.stream.samplerate)
+        #     # For testing only
+        #     # sd.play(self.buffer, self.input_stream.stream.samplerate)
             
-            transcribed_text = Transcriber.transcribe(self.buffer)
-            print(transcribed_text)
-            response = self.agent.get_response(transcribed_text)
-            action = self.parse_response(response)
-            if action is not None:
-                self.buffer = None
-                self.publish_action(action)
+        #     transcribed_text = Transcriber.transcribe(self.buffer)
+        #     print(transcribed_text)
+        #     response = self.agent.get_response(transcribed_text)
+        #     action = self.parse_response(response)
+        #     if action is not None:
+        #         self.buffer = None
+        #         self.publish_action(action)
+    
+    def on_callback(self, indata, frames, time, status):
+        # print("On callback")
+        if self.buffer is None:
+            self.buffer = indata
+        else:
+            self.buffer = np.concatenate((self.buffer, indata), axis=0)
+        
+        # For testing only
+        # sd.play(self.buffer, self.input_stream.stream.samplerate)
+        
+        transcribed_text = Transcriber.transcribe(self.buffer)
+        print(transcribed_text)
+        # response = self.agent.get_response(transcribed_text)
+        # action = self.parse_response(response)
+        # if action is not None:
+            # self.buffer = None
+            # self.publish_action(action)
 
     def parse_response(self, response: str):
         if response == "[NO_ACTION]":
