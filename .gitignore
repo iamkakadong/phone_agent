@@ -3,7 +3,7 @@
 /.pytest_cache
 /__pycache__
 /venv
-src/__pycache__
-tmp/*
-tests/tmp/*
+/src/__pycache__
+/tmp
+/tests/tmp
 ```
