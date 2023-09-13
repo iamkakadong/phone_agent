@@ -4,4 +4,6 @@
 /__pycache__
 /venv
 src/__pycache__
-tmp/temp.wav
+tmp/*
+tests/tmp/*
+```

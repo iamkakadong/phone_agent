@@ -42,53 +42,36 @@ class PhoneCallService:
 
 class Transcriber:
     @staticmethod
-    def transcribe(audio: np.ndarray) -> str:
+    def transcribe(audio: np.ndarray, counter=None) -> str:
         from scipy.io.wavfile import write
         import openai
-        write("tmp/temp.wav", 44100, audio)
-        audio_file = open("tmp/temp.wav", 'rb')
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        write(f"tmp/temp_{counter}.wav", 44100, audio)
+        audio_file = open(f"tmp/temp_{counter}.wav", 'rb')
+        # transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        transcript = {'text': 'Hello, how are you?'}
         return transcript['text']
 
 
 class LiveAudioStreamHandler:
     """
-        An object that listens to a live audio stream (i.e. phone call) and responds to the it accordingly
+        An object that listens to a live audio stream (i.e. phone call) and publishes responses accordingly
     """
-    def __init__(self, agent, input_stream: AudioStream = None, output_stream: ActionStream = None) -> None:
+    STREAM_MAX_SIZE = 20 # in seconds
+    def __init__(self, agent: Agent = None, input_stream: sd.InputStream = None, output_stream: ActionStream = None, poll_frequency=1) -> None:
         self.input_stream: sd.InputStream = input_stream # Audio Stream
         self.output_stream: ActionStream = output_stream if output_stream else ActionStream() # Action Stream
         self.agent: Agent = agent
-        self.poll_frequency = 1 # in seconds
+        self.poll_frequency = poll_frequency # in seconds
         self.buffer: np.ndarray = None
+        self.counter = 0
 
     def start(self):
         self.status = "running"
-        self.input_stream = get_audio_stream(block_size=self.poll_frequency * 44100, callback_func=self.on_callback)
+        if self.input_stream is None:
+            self.input_stream = get_audio_stream(block_size=self.poll_frequency * 44100, callback_func=self.on_callback)
         with self.input_stream:
-            sd.sleep(50000)
-        # while self.status == "running":
-        #     # poll every 1 second
-        #     time.sleep(self.poll_frequency)
-
-        #     context = self.input_stream.poll(self.poll_frequency)
-        #     # TODO: Handle case when context is empty
-
-        #     if self.buffer is None:
-        #         self.buffer = context
-        #     else:
-        #         self.buffer = np.concatenate((self.buffer, context), axis=0)
-            
-        #     # For testing only
-        #     # sd.play(self.buffer, self.input_stream.stream.samplerate)
-            
-        #     transcribed_text = Transcriber.transcribe(self.buffer)
-        #     print(transcribed_text)
-        #     response = self.agent.get_response(transcribed_text)
-        #     action = self.parse_response(response)
-        #     if action is not None:
-        #         self.buffer = None
-        #         self.publish_action(action)
+            # stream is active and callback is working
+            sd.sleep(self.STREAM_MAX_SIZE * 1000)
     
     def on_callback(self, indata, frames, time, status):
         # print("On callback")
@@ -97,16 +80,24 @@ class LiveAudioStreamHandler:
         else:
             self.buffer = np.concatenate((self.buffer, indata), axis=0)
         
-        # For testing only
-        # sd.play(self.buffer, self.input_stream.stream.samplerate)
-        
-        transcribed_text = Transcriber.transcribe(self.buffer)
-        print(transcribed_text)
-        # response = self.agent.get_response(transcribed_text)
-        # action = self.parse_response(response)
-        # if action is not None:
-            # self.buffer = None
-            # self.publish_action(action)
+        # This step can cause latency such that there is significant gap between two blocks coming out of audio stream
+        # It's better to use a separate thread for this such that it doesn't block the audio stream
+        # Also, it's better for the callback to just put the data in buffer and let the other thread handle its processing
+        transcribed_text = Transcriber.transcribe(self.buffer, self.counter)
+        self.counter += 1
+
+        action = self.gen_action(transcribed_text)
+        if action is not None:
+            self.buffer = None
+            self.publish_action(action)
+
+    def gen_action(self, transcribed_text):
+        action = transcribed_text
+        if self.agent is not None:
+            # response = self.agent.get_response(transcribed_text)
+            # action = self.parse_response(response)
+            pass
+        return action
 
     def parse_response(self, response: str):
         if response == "[NO_ACTION]":
@@ -131,7 +122,7 @@ class LiveAudioStreamHandler:
         return self.output_stream
     
     def publish_action(self, action):
-        self.output_stream.put(action)
+        # self.output_stream.put(action)
         print(action)
 
 
