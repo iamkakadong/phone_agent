@@ -12,3 +12,9 @@ class Action:
     type: str
     voice: Optional[str]
     keys: Optional[str]
+
+
+@dataclass
+class AgentTask:
+    name: str
+    goal: str

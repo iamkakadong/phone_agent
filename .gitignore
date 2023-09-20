@@ -6,4 +6,4 @@
 /src/__pycache__
 /tmp
 /tests/tmp
-```
+/src/*/__pycache__

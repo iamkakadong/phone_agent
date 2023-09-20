@@ -1,29 +1,15 @@
-from dataclasses import dataclass
-import os
-from langchain import LLMChain, OpenAI, PromptTemplate
-from langchain.chat_models import ChatOpenAI
-import openai
-from src.typedef import Action
+from src.utils.typedef import AgentTask
 
-from langchain.agents import initialize_agent, Tool, AgentType
-from langchain.memory import ConversationBufferMemory
+import openai
 
 from typing import List, Tuple
 
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY_PERSONAL"]
-openai.api_key = OPENAI_API_KEY
-
-@dataclass
-class Task:
-    name: str
-    goal: str
-
 class Agent:
-    def __init__(self, task: Task) -> None:
+    def __init__(self, task: AgentTask) -> None:
         self.chat_history: List[Tuple[str, str]] = []
         self.task = task
-        
+
     def _gen_system_prompt(self):
         return f"""
             You are a helpful assistant that makes phone call for people to achieve their goals. You will be receiving a live transcript of the phone call and should respond to the conversation.
@@ -44,9 +30,9 @@ class Agent:
             You: """
         messages = self._construct_chat_messages_from_history()
         messages.append({"role": "user", "content": human_message})
-        
+
         llm_response = self._get_response_from_llm(messages)
-        
+
         if llm_response == "[NO_ACTION]":
             pass
         elif llm_response.count("[END_CALL]") > 0:
@@ -56,7 +42,7 @@ class Agent:
             self.chat_history.append(("user", human_message))
             self.chat_history.append(("system", llm_response))
         return llm_response
-            
+
 
     def _construct_chat_messages_from_history(self) -> str:
         """
